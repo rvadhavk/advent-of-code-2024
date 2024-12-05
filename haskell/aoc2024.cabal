@@ -1,0 +1,17 @@
+cabal-version:      3.0
+name:               aoc2024
+version:            0.1.0.0
+
+library
+    ghc-options: -Wall -O
+    exposed-modules:  AoC2024
+    default-extensions: OverloadedStrings
+    build-depends:    
+      base,
+      containers,
+      megaparsec,
+      parsec,
+      text ^>= 2.1.2,
+    hs-source-dirs:   src
+    default-language: GHC2021
+
