@@ -194,7 +194,7 @@ day5 = Solution {
       inOrder (x:xs) = all (x `precedes`) xs && inOrder xs
       middle xs = xs !! (length xs `div` 2)
       part1 = sum . fmap middle . filter inOrder $ nodeLists
-      -- Very inefficient O(n^2) topsort, but sufficient to solve the task in reasonable time
+      -- Very inefficient O(n^3) topsort, but sufficient to solve the task in reasonable time
       topsort [] = []
       topsort xs = leaf:(topsort (delete leaf xs)) where
         leaf = fromJust $ find (\x -> not $ any (`precedes` x) xs) xs
