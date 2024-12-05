@@ -185,19 +185,19 @@ day5 :: Solution ([(Int, Int)], [[Int]])
 day5 = Solution {
   day = 5,
   parser = let
-      edge = (,) <$> decimal <* char '|' <*> decimal :: Parser (Int, Int)
-      intList = decimal `sepBy1` char ',' :: Parser [Int]
-    in (,) <$> edge `sepEndBy` newline <* newline <*> intList `sepEndBy` newline,
+      edge = (,) <$> decimal <* char '|' <*> decimal
+      nodeList = decimal `sepBy1` char ','
+    in (,) <$> edge `sepEndBy` newline <* newline <*> nodeList `sepEndBy` newline,
   solver = \(edges, nodeLists) -> let
-      precedes a b = elem (a, b) edges
+      covers a b = elem (b, a) edges
       inOrder [] = True
-      inOrder (x:xs) = all (x `precedes`) xs && inOrder xs
+      inOrder (x:xs) = not (any (x `covers`) xs) && inOrder xs
       middle xs = xs !! (length xs `div` 2)
       part1 = sum . fmap middle . filter inOrder $ nodeLists
       -- Very inefficient O(n^3) topsort, but sufficient to solve the task in reasonable time
       topsort [] = []
       topsort xs = leaf:(topsort (delete leaf xs)) where
-        leaf = fromJust $ find (\x -> not $ any (`precedes` x) xs) xs
+        leaf = fromJust $ find (\x -> not $ any (x `covers`) xs) xs
       part2 =  sum $ fmap (middle . topsort) . filter (not . inOrder) $ nodeLists
     in show <$> [part1, part2]
 }
