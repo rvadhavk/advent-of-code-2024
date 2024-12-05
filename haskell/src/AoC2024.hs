@@ -190,14 +190,16 @@ day5 = Solution {
     in (,) <$> edge `sepEndBy` newline <* newline <*> nodeList `sepEndBy` newline,
   solver = \(edges, nodeLists) -> let
       covers a b = elem (b, a) edges
+      doesntCoverAny x ys = not $ any (x `covers`) ys
       inOrder [] = True
-      inOrder (x:xs) = not (any (x `covers`) xs) && inOrder xs
+      inOrder (x:xs) = x `doesntCoverAny` xs && inOrder xs
       middle xs = xs !! (length xs `div` 2)
       part1 = sum . fmap middle . filter inOrder $ nodeLists
-      -- Very inefficient O(n^3) topsort, but sufficient to solve the task in reasonable time
+      -- Very inefficient O(E*V^2) topsort, where E is length of edges and
+      -- V is length of the argument node/vertex list
       topsort [] = []
       topsort xs = leaf:(topsort (delete leaf xs)) where
-        leaf = fromJust $ find (\x -> not $ any (x `covers`) xs) xs
+        leaf = fromJust $ find (`doesntCoverAny` xs) xs
       part2 =  sum $ fmap (middle . topsort) . filter (not . inOrder) $ nodeLists
     in show <$> [part1, part2]
 }
