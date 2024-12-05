@@ -181,6 +181,9 @@ day4 = Solution {
 
 -- DAY 5
 
+none :: Foldable f => (a -> Bool) -> f a -> Bool
+none f = not . any f
+
 day5 :: Solution ([(Int, Int)], [[Int]])
 day5 = Solution {
   day = 5,
@@ -189,17 +192,16 @@ day5 = Solution {
       nodeList = decimal `sepBy1` char ','
     in (,) <$> edge `sepEndBy` newline <* newline <*> nodeList `sepEndBy` newline,
   solver = \(edges, nodeLists) -> let
-      covers a b = elem (b, a) edges
-      doesntCoverAny x ys = not $ any (x `covers`) ys
+      isCoveredBy a b = elem (a, b) edges
       inOrder [] = True
-      inOrder (x:xs) = x `doesntCoverAny` xs && inOrder xs
+      inOrder (x:xs) = none (`isCoveredBy` x) xs && inOrder xs
       middle xs = xs !! (length xs `div` 2)
       part1 = sum . fmap middle . filter inOrder $ nodeLists
       -- Very inefficient O(E*V^2) topsort, where E is length of edges and
       -- V is length of the argument node/vertex list
       topsort [] = []
-      topsort xs = leaf:(topsort (delete leaf xs)) where
-        leaf = fromJust $ find (`doesntCoverAny` xs) xs
+      topsort xs = source:(topsort (delete source xs)) where
+        source = fromJust $ find (\x -> none (`isCoveredBy` x) xs) xs
       part2 =  sum $ fmap (middle . topsort) . filter (not . inOrder) $ nodeLists
     in show <$> [part1, part2]
 }
