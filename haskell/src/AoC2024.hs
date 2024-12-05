@@ -4,6 +4,7 @@ import Data.Ix (inRange)
 import Data.List
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
+import Data.Maybe (fromJust)
 import Data.Void (Void)
 import Text.Megaparsec 
   ( Parsec
@@ -87,8 +88,6 @@ day1 = Solution {
 }
 
 -- DAY 2
-intList :: Parser [Int]
-intList = sepBy1 decimal hspace
 
 remove1 :: [a] -> [[a]]
 remove1 [] = []
@@ -100,7 +99,7 @@ remove1 (x:xs) = xs:((x:) <$> remove1 xs)
 day2 :: Solution [[Int]]
 day2 = Solution {
   day = 2,
-  parser = sepEndBy intList newline <* eof,
+  parser = let intList = sepBy1 decimal hspace in sepEndBy intList newline <* eof,
   solver = (\reports -> let
       isSafePart1 [] = True
       isSafePart1 levels = strictlyOrdered && all (inRange (1, 3) . abs) diffs where
@@ -168,14 +167,37 @@ countMasXs rows = length . filter hasMasX $ coords where
   coords = [(r, c) | r <- [0..length rows - 3], c <- [0..length cols - 3]]
   hasMasX (r, c) = all (\d -> d == "SAM" || d == "MAS") diags where
       diags :: [String]
-      diags = [[rows !! (r + dr) !! (c + dc) | (dr, dc) <- offset] | offset <- diagCoords]
+      diags = [[rows !! (r + dr) !! (c + dc) | (dr, dc) <- offsets] | offsets <- diagCoords]
       diagCoords = [
         [(0, 0), (1, 1), (2, 2)],
-        [(0, 2), (1, 1), (2, 0)] ]
+        [(0, 2), (1, 1), (2, 0)]]
 
 day4 :: Solution [String]
 day4 = Solution {
   day = 4,
   parser = lines <$> takeRest,
   solver = (\rows -> show <$> [countXmas rows, countMasXs rows])
+}
+
+-- DAY 5
+
+day5 :: Solution ([(Int, Int)], [[Int]])
+day5 = Solution {
+  day = 5,
+  parser = let
+      edge = (,) <$> decimal <* char '|' <*> decimal :: Parser (Int, Int)
+      intList = decimal `sepBy1` char ',' :: Parser [Int]
+    in (,) <$> edge `sepEndBy` newline <* newline <*> intList `sepEndBy` newline,
+  solver = \(edges, nodeLists) -> let
+      precedes a b = elem (a, b) edges
+      inOrder [] = True
+      inOrder (x:xs) = all (x `precedes`) xs && inOrder xs
+      middle xs = xs !! (length xs `div` 2)
+      part1 = sum . fmap middle . filter inOrder $ nodeLists
+      -- Very inefficient O(n^2) topsort, but sufficient to solve the task in reasonable time
+      topsort [] = []
+      topsort xs = leaf:(topsort (delete leaf xs)) where
+        leaf = fromJust $ find (\x -> not $ any (`precedes` x) xs) xs
+      part2 =  sum $ fmap (middle . topsort) . filter (not . inOrder) $ nodeLists
+    in show <$> [part1, part2]
 }
