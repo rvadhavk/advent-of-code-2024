@@ -1,11 +1,14 @@
 module AoC2024 where
 
+import Control.Lens
 import Data.Ix (inRange)
 import Data.List
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
+import qualified Data.Set as S
 import Data.Maybe (fromJust)
 import Data.Void (Void)
+import System.IO.Unsafe
 import Text.Megaparsec 
   ( Parsec
   , anySingle
@@ -181,9 +184,6 @@ day4 = Solution {
 
 -- DAY 5
 
-none :: Foldable f => (a -> Bool) -> f a -> Bool
-none f = not . any f
-
 day5 :: Solution ([(Int, Int)], [[Int]])
 day5 = Solution {
   day = 5,
@@ -205,3 +205,82 @@ day5 = Solution {
       part2 =  sum $ fmap (middle . topsort) . filter (not . inOrder) $ nodeLists
     in show <$> [part1, part2]
 }
+
+-- DAY 6
+
+type Coord = (Int, Int)
+
+data Pose = Pose {
+    _position :: (Int, Int)
+  , _direction :: (Int, Int)
+} deriving (Eq, Ord, Show)
+makeLenses ''Pose
+
+-- +y is down and +x is right
+turnRight :: Num a => (a, a) -> (a, a)
+turnRight (y, x) = (x, -y)
+
+addTuples :: (Num a, Num b) => (a, b) -> (a, b) -> (a, b)
+addTuples (a0, b0) (a1, b1) = (a0 + a1, b0 + b1)
+
+day6Step :: S.Set Coord -> Pose -> Pose
+day6Step obstacles pose = update pose where
+  update = if blocked then direction %~ turnRight else position .~ inFront
+  inFront = addTuples (pose ^. position) (pose ^. direction)
+  blocked = S.member inFront obstacles
+
+hasDuplicate :: Ord a => [a] -> Bool
+hasDuplicate = help S.empty where
+  help _ [] = False
+  help seen (x:xs) = if S.member x seen then True else help (S.insert x seen) xs
+
+elemIndices2d :: Eq a => a -> [[a]] -> [(Int, Int)]
+elemIndices2d x xs = do
+  (rowIdx, row) <- zip [0..] xs
+  colIdx <- elemIndices x row
+  return (rowIdx, colIdx)
+
+data Day6Input = Day6Input {
+    mapSize :: (Int, Int)
+  , obstacles :: S.Set (Int, Int)
+  , start :: Pose
+} deriving (Eq, Show)
+
+day6 :: Solution Day6Input
+day6 = Solution {
+    day = 6
+  , parser = do
+      rows <- lines <$> takeRest -- bypass megaparsec for this day
+      return Day6Input {
+          mapSize = (length rows, length $ head rows)
+        , obstacles = S.fromList $ elemIndices2d '#' rows
+        , start = Pose {
+            _position = head $ elemIndices2d '^' rows
+            -- +y is down and +x is right
+          , _direction = (-1, 0) 
+        }
+      }
+  , solver = \Day6Input{mapSize, obstacles, start} -> let
+      onMap (y, x) = inRange (0, fst mapSize - 1) y && inRange (0, snd mapSize - 1) x
+      part1Positions :: S.Set (Int, Int)
+      part1Positions = iterate (day6Step obstacles) start -- [Pose]
+        <&> view position -- [(Int, Int)]
+         &  takeWhile onMap
+         &  S.fromList
+      part1 = S.size part1Positions
+      -- Instead of trying putting an obstacle at any empty space,
+      -- only test spaces the guard would actually run into an obstacle.
+      obstacleCandidates :: S.Set (Int, Int)
+      obstacleCandidates = S.delete (start ^. position)  part1Positions
+      -- If we're ever in the same pose a second time, we know the simulation
+      -- is in a loop.
+      inducesLoop newObstacle = hasDuplicate poses where
+        poses :: [Pose]
+        poses = iterate (day6Step (S.insert newObstacle obstacles)) start
+          & takeWhile (onMap . view position)
+      part2 = length $ S.filter inducesLoop obstacleCandidates
+    in [show part1, show part2]
+}
+ 
+      
+
