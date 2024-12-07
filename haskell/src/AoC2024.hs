@@ -1,7 +1,6 @@
 module AoC2024 where
 
-import Debug.Trace
-import Control.Lens
+import Control.Lens hiding (levels)
 import Data.Ix (inRange)
 import Data.List
 import qualified Data.List.NonEmpty as NE
@@ -9,7 +8,6 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.Maybe (fromJust)
 import Data.Void (Void)
-import System.IO.Unsafe
 import Text.Megaparsec 
   ( Parsec
   , anySingle
@@ -252,15 +250,18 @@ day6 = Solution {
     day = 6
   , parser = do
       rows <- lines <$> takeRest -- bypass megaparsec for this day
-      return Day6Input {
-          mapSize = (length rows, length $ head rows)
-        , obstacles = S.fromList $ elemIndices2d '#' rows
-        , start = Pose {
-            _position = head $ elemIndices2d '^' rows
-            -- +y is down and +x is right
-          , _direction = (-1, 0) 
-        }
-      }
+      let caretCoords = elemIndices2d '^' rows
+      case caretCoords of
+        [caretCoord] -> return Day6Input {
+              mapSize = (length rows, length $ transpose rows)
+            , obstacles = S.fromList $ elemIndices2d '#' rows
+            , start = Pose {
+                _position = caretCoord
+                -- +y is down and +x is right
+              , _direction = (-1, 0) 
+            }
+          }
+        _ -> fail $ "Expected exactly one '^' but found " ++ show (length caretCoords)
   , solver = \Day6Input{mapSize, obstacles, start} -> let
       onMap (y, x) = inRange (0, fst mapSize - 1) y && inRange (0, snd mapSize - 1) x
       part1Positions :: S.Set (Int, Int)
@@ -287,10 +288,10 @@ day6 = Solution {
 
 reductions :: [a -> a -> a] -> [a] -> [a]
 reductions _ [] = []
-reductions ops xs = foldl1 (\a b -> ops <*> a <*> b) (singleton <$> xs)
+reductions ops xs = foldl1 (\a b -> ops <*> a <*> b) (pure <$> xs)
 
 catDigits :: Int -> Int -> Int
-catDigits a b = a * (10 :: Int)^(numDigits b) + b where
+catDigits a b = a * (10 :: Int)^(numDigits b :: Int) + b where
   numDigits 0 = 0
   numDigits n = 1 + numDigits (n `div` 10)
 
@@ -299,7 +300,7 @@ day7 = Solution {
     day = 7
   , parser = ((,) <$> decimal <* ": " <*> decimal `sepBy` " ") `sepEndBy` newline
   , solver = \equations -> let
-      solvableWith ops (solution, operands) = any (== solution) (reductions ops operands)
+      solvableWith ops (target, operands) = target `elem` reductions ops operands
       part1 = sum . fmap fst . filter (solvableWith [(+), (*)]) $ equations
       part2 = sum . fmap fst . filter (solvableWith [catDigits, (+), (*)]) $ equations
     in [show part1, show part2]
