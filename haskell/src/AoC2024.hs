@@ -1,5 +1,6 @@
 module AoC2024 where
 
+import Debug.Trace
 import Control.Lens
 import Data.Ix (inRange)
 import Data.List
@@ -282,5 +283,24 @@ day6 = Solution {
     in [show part1, show part2]
 }
  
-      
+-- DAY 7
 
+reductions :: [a -> a -> a] -> [a] -> [a]
+reductions _ [] = []
+reductions ops xs = foldl1 (\a b -> ops <*> a <*> b) (singleton <$> xs)
+
+catDigits :: Int -> Int -> Int
+catDigits a b = a * (10 :: Int)^(numDigits b) + b where
+  numDigits 0 = 0
+  numDigits n = 1 + numDigits (n `div` 10)
+
+day7 :: Solution [(Int, [Int])]
+day7 = Solution {
+    day = 7
+  , parser = ((,) <$> decimal <* ": " <*> decimal `sepBy` " ") `sepEndBy` newline
+  , solver = \equations -> let
+      solvableWith ops (solution, operands) = any (== solution) (reductions ops operands)
+      part1 = sum . fmap fst . filter (solvableWith [(+), (*)]) $ equations
+      part2 = sum . fmap fst . filter (solvableWith [catDigits, (+), (*)]) $ equations
+    in [show part1, show part2]
+}
