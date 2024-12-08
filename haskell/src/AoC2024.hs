@@ -315,11 +315,12 @@ pairs (x:xs) = ((x,) <$> xs) ++ pairs xs
 
 subTuples (a0, b0) (a1, b1) = (a0 - a1, b0 - b1)
 
-antinodes1 onMap x y = filter onMap (peripherals ++ betweens) where
+antinodes1 x y = peripherals ++ betweens where
   diff = subTuples y x
   peripherals = [addTuples y diff, subTuples x diff]
   betweens = if diff & allOf both ((== 0) . (`mod` 3))
-    then let diffDiv3 = diff & both %~ (`div` 3) in [addTuples x diffDiv3, subTuples y diffDiv3]
+    then let diffDiv3 = diff & both %~ (`div` 3) 
+      in [addTuples x diffDiv3, subTuples y diffDiv3]
     else []
 
 antinodes2 onMap x y = help x y ++ help y x where
@@ -338,10 +339,9 @@ day8 = Solution {
       return $ ((length rows, length $ head rows), MM.toMap $ MM.fromList charLocs)
   , solver = \((rows, cols), charLocs) -> let
       onMap (r, c) = inRange (0, rows - 1) r && inRange (0, cols - 1) c
-      uniqueAntinodeCount f = countUnique . concat . M.elems $ antinodes where
-        antinodes = charLocs <&> \locs -> pairs locs >>= uncurry (f onMap)
-      part1 = uniqueAntinodeCount antinodes1
-      part2 = uniqueAntinodeCount antinodes2
+      allPairs = M.elems charLocs >>= pairs
+      part1 = countUnique [x | (a, b) <- allPairs, x <- antinodes1 a b, onMap x]
+      part2 = countUnique [x | (a, b) <- allPairs, x <- antinodes2 onMap a b]
     in [show part1, show part2]
 }
        
