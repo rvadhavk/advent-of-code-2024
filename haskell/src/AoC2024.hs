@@ -1,10 +1,12 @@
 module AoC2024 where
 
 import Control.Lens hiding (levels)
+import Data.Foldable (toList)
 import Data.Ix (inRange)
 import Data.List
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
+import qualified Data.MultiMap as MM
 import qualified Data.Set as S
 import Data.Maybe (fromJust)
 import Data.Void (Void)
@@ -281,7 +283,7 @@ day6 = Solution {
         poses = iterate (day6Step (S.insert newObstacle obstacles)) start
           & takeWhile (onMap . view position)
       part2 = length $ S.filter inducesLoop obstacleCandidates
-    in [show part1, show part2]
+    in show <$> [part1, part2]
 }
  
 -- DAY 7
@@ -303,5 +305,46 @@ day7 = Solution {
       solvableWith ops (target, operands) = target `elem` reductions ops operands
       part1 = sum . fmap fst . filter (solvableWith [(+), (*)]) $ equations
       part2 = sum . fmap fst . filter (solvableWith [catDigits, (+), (*)]) $ equations
+    in show <$> [part1, part2]
+}
+
+-- DAY 8
+
+pairs [] = []
+pairs (x:xs) = ((x,) <$> xs) ++ pairs xs
+
+subTuples (a0, b0) (a1, b1) = (a0 - a1, b0 - b1)
+
+antinodes1 onMap x y = filter onMap (peripherals ++ betweens) where
+  diff = subTuples y x
+  peripherals = [addTuples y diff, subTuples x diff]
+  betweens = if diff & allOf both ((== 0) . (`mod` 3))
+    then let diffDiv3 = diff & both %~ (`div` 3) in [addTuples x diffDiv3, subTuples y diffDiv3]
+    else []
+
+antinodes2 onMap x y = help x y ++ help y x where
+  help a b = takeWhile onMap [addTuples b (diff & both *~ n) | n <- [0..]] where
+    diff = subTuples b a
+
+countUnique :: (Foldable t, Ord a) => t a -> Int
+countUnique = S.size . S.fromList . toList 
+
+day8 :: Solution ((Int, Int), M.Map Char [(Int, Int)])
+day8 = Solution {
+    day = 8
+  , parser = do
+      rows <- lines <$> takeRest
+      let charLocs = [ (c, (i, j)) | (i, row) <- zip [0..] rows , (j, c) <- zip [0..] row , c /= '.' ]
+      return $ ((length rows, length $ head rows), MM.toMap $ MM.fromList charLocs)
+  , solver = \((rows, cols), charLocs) -> let
+      onMap (r, c) = inRange (0, rows - 1) r && inRange (0, cols - 1) c
+      uniqueAntinodeCount f = countUnique . concat . M.elems $ antinodes where
+        antinodes = charLocs <&> \locs -> pairs locs >>= uncurry (f onMap)
+      part1 = uniqueAntinodeCount antinodes1
+      part2 = uniqueAntinodeCount antinodes2
     in [show part1, show part2]
 }
+       
+
+
+        
