@@ -5,11 +5,13 @@ version:            0.1.0.0
 library
     ghc-options: -Wall -O
     exposed-modules:  AoC2024
-    default-extensions: OverloadedStrings
+    default-extensions: TemplateHaskell, OverloadedStrings
     build-depends:    
       base,
       containers,
+      lens,
       megaparsec,
+      multimap,
       parsec,
       text ^>= 2.1.2,
     hs-source-dirs:   src

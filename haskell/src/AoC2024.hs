@@ -310,40 +310,51 @@ day7 = Solution {
 
 -- DAY 8
 
-pairs [] = []
-pairs (x:xs) = ((x,) <$> xs) ++ pairs xs
+    pairs :: [a] -> [(a, a)]
+    pairs [] = []
+    pairs (x:xs) = ((x,) <$> xs) ++ pairs xs
+    
+    subTuples :: Num a => (a, a) -> (a, a) -> (a, a)
+    subTuples a b = addTuples a (over both negate b)
+    
+    antinodes1 :: Integral a => (a, a) -> (a, a) -> [(a, a)]
+    antinodes1 x y = outsides ++ insides where
+      diff = subTuples y x
+      -- outsides are like o---x---y---o
+      outsides = [addTuples y diff, subTuples x diff]
+      -- insides are like x--o--o--y
+      insides = if allOf both ((== 0) . (`mod` 3)) diff
+        then let diffDiv3 = over both (`div` 3) diff
+          in [addTuples x diffDiv3, subTuples y diffDiv3]
+        else []
+    
+    antinodes2 :: Integral a => ((a, a) -> Bool) -> (a, a) -> (a, a) -> [(a, a)]
+    antinodes2 onMap x y = help x y ++ help y x where
+      help a b = takeWhile onMap [addTuples b (over both (*n) diff) | n <- [0..]] where
+        diff = subTuples b a
+    
+    countUnique :: (Foldable t, Ord a) => t a -> Int
+    countUnique = S.size . S.fromList . toList 
 
-subTuples (a0, b0) (a1, b1) = (a0 - a1, b0 - b1)
-
-antinodes1 x y = peripherals ++ betweens where
-  diff = subTuples y x
-  peripherals = [addTuples y diff, subTuples x diff]
-  betweens = if diff & allOf both ((== 0) . (`mod` 3))
-    then let diffDiv3 = diff & both %~ (`div` 3) 
-      in [addTuples x diffDiv3, subTuples y diffDiv3]
-    else []
-
-antinodes2 onMap x y = help x y ++ help y x where
-  help a b = takeWhile onMap [addTuples b (diff & both *~ n) | n <- [0..]] where
-    diff = subTuples b a
-
-countUnique :: (Foldable t, Ord a) => t a -> Int
-countUnique = S.size . S.fromList . toList 
-
-day8 :: Solution ((Int, Int), M.Map Char [(Int, Int)])
-day8 = Solution {
-    day = 8
-  , parser = do
-      rows <- lines <$> takeRest
-      let charLocs = [ (c, (i, j)) | (i, row) <- zip [0..] rows , (j, c) <- zip [0..] row , c /= '.' ]
-      return $ ((length rows, length $ head rows), MM.toMap $ MM.fromList charLocs)
-  , solver = \((rows, cols), charLocs) -> let
-      onMap (r, c) = inRange (0, rows - 1) r && inRange (0, cols - 1) c
-      allPairs = M.elems charLocs >>= pairs
-      part1 = countUnique [x | (a, b) <- allPairs, x <- antinodes1 a b, onMap x]
-      part2 = countUnique [x | (a, b) <- allPairs, x <- antinodes2 onMap a b]
-    in [show part1, show part2]
-}
+    day8 :: Solution ((Int, Int), M.Map Char [(Int, Int)])
+    day8 = Solution {
+        day = 8
+      , parser = do
+          rows <- lines <$> takeRest -- bypass megaparsec for today
+          let charLocs = [ (c, (i, j)) 
+                         | (i, row) <- zip [0..] rows
+                         , (j, c) <- zip [0..] row
+                         , c /= '.'
+                         ]
+              mapSize = (length rows, length $ head rows)
+          return $ (mapSize, MM.toMap $ MM.fromList charLocs)
+      , solver = \((rows, cols), charLocs) -> let
+          onMap (r, c) = inRange (0, rows - 1) r && inRange (0, cols - 1) c
+          allPairs = M.elems charLocs >>= pairs
+          part1 = countUnique [x | (a, b) <- allPairs, x <- antinodes1 a b, onMap x]
+          part2 = countUnique [x | (a, b) <- allPairs, x <- antinodes2 onMap a b]
+        in [show part1, show part2]
+    }
        
 
 
