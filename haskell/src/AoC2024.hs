@@ -330,6 +330,8 @@ day7 = Solution {
     
     antinodes2 :: Integral a => ((a, a) -> Bool) -> (a, a) -> (a, a) -> [(a, a)]
     antinodes2 onMap x y = help x y ++ help y x where
+      -- given            a--b----...
+      -- returns antinodes   o--o--o--o--...
       help a b = takeWhile onMap [addTuples b (over both (*n) diff) | n <- [0..]] where
         diff = subTuples b a
     
