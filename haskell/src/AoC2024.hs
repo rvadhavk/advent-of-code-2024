@@ -1,12 +1,19 @@
 module AoC2024 where
 
-import Control.Lens hiding (levels)
+import Control.Monad.State.Lazy
+import Control.Lens hiding ((<|), (|>), Empty, levels)
+import Data.AdditiveGroup
+import Data.Char (digitToInt, intToDigit, isDigit)
 import Data.Foldable (toList)
+import Data.Functor (($>))
 import Data.Ix (inRange)
 import Data.List
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
+import Data.Maybe (fromMaybe, isJust, isNothing)
 import qualified Data.MultiMap as MM
+import qualified Data.Sequence as Seq
+import Data.Sequence (Seq(..), (<|), (|>))
 import qualified Data.Set as S
 import Data.Maybe (fromJust)
 import Data.Void (Void)
@@ -25,9 +32,11 @@ import Text.Megaparsec
   , sepBy
   , sepBy1
   , sepEndBy
+  , sepEndBy1
+  , some
   , takeRest
   )
-import Text.Megaparsec.Char (char, newline, hspace)
+import Text.Megaparsec.Char (char, digitChar, newline, hspace)
 import Text.Megaparsec.Char.Lexer (decimal)
 
 
@@ -358,6 +367,95 @@ day8 = Solution {
     in [show part1, show part2]
 }
    
+-- DAY 9
+interleave :: [[a]] -> [a]
+interleave = concat . transpose
 
+readDiskMap :: [Int] -> [Chunk]
+readDiskMap sizes = [Chunk{size, fileId} | (size, fileId) <- zip sizes ids] where
+  ids = interleave [Just <$> [0..], repeat Nothing]
+
+expandDiskMap :: [Chunk] -> [Maybe Int]
+expandDiskMap chunks = [fileId  | Chunk{size, fileId} <- chunks, _ <- [1..size]]
+
+compact1 :: [Maybe Int] -> [Int]
+compact1 = help . Seq.fromList where
+  help Empty = []
+  help (Nothing:<|Empty) = [] -- single free space
+  help (Just x:<|Empty) = [x] -- single file block
+  help (a:<|(middle:|>b)) = case (a, b) of
+    (_, Nothing) -> help (a <| middle) -- discard trailing free space
+    (Just x, _) -> x:help (middle |> b) -- leave leading file blocks alone
+    (Nothing, Just x) -> x:help middle -- move trailing file blocks to free space
+
+compact2 :: [Chunk] -> [Chunk]
+compact2 = toList . help . Seq.fromList where
+  help Empty = Empty
+  help (prefix:|>x@Chunk{fileId=Nothing}) = (help prefix) |> x
+  help (prefix:|>x) = case attemptInsert x prefix of
+    Just result -> help result |> Chunk{fileId=Nothing, size=size x}
+    Nothing -> help prefix |> x
+  attemptInsert _ Empty = Nothing
+  attemptInsert x (y:<|suffix) = case fileId y of
+    Just _ -> fmap (y<|) (attemptInsert x suffix)
+    Nothing -> case compare (size x) (size y) of
+      LT -> Just $ x <| Chunk{fileId=Nothing, size=size y - size x} <| suffix
+      EQ -> Just $ x <| suffix
+      GT -> fmap (y<|) (attemptInsert x suffix)
+
+data Chunk = Chunk {
+    fileId :: Maybe Int
+  , size :: Int
+} deriving (Show)
+
+day9 :: Solution [Chunk]
+day9 = Solution {
+    day = 9
+  , parser = readDiskMap <$> many (digitToInt <$> digitChar)
+  , solver = \chunks -> let
+      checksum = sum . zipWith (*) [0..]
+      part1 = checksum . compact1 . expandDiskMap $ chunks 
+      part2 = checksum . fmap (fromMaybe 0) . expandDiskMap . compact2 $ chunks
+    in show <$> [part1, part2]
+}
 
   
+-- DAY 10
+
+(!!?) :: [[a]] -> (Int, Int) -> Maybe a
+grid !!? (row, col) = grid !? row >>= (!? col)
+
+depthFirstSearch :: ((Int, Int) -> s -> s) -> ((Int, Int) -> s -> Bool) -> (Int, Int) -> [[Int]] -> State s Int
+depthFirstSearch visit visited coord@(row, col) grid = do
+  let height = grid !! row !! col
+      neighbors = [ neighbor
+                  | offset <- [(0, 1), (0, -1), (1, 0), (-1, 0)]
+                  , let neighbor = coord ^+^ offset
+                  , Just neighborHeight <- [grid !!? neighbor]
+                  , neighborHeight == height + 1 ]
+      trailsFromNeighbors = sequence [depthFirstSearch visit visited n grid | n <- neighbors]
+  alreadyVisited <- gets (visited coord)
+  if alreadyVisited then return 0
+  else do
+    modify (visit coord)
+    if height == 9 then return 1 else sum <$> trailsFromNeighbors
+
+day10 :: Solution [[Int]]
+day10 = Solution {
+    day = 10
+  , parser = some (digitToInt <$> digitChar) `sepEndBy1` newline
+  , solver = \grid -> let
+      part1 = sum [ evalState (depthFirstSearch S.insert S.member (r, c) grid ) S.empty
+        | r <- [0..length grid - 1]
+        , c <- [0..length (head grid) - 1]
+        , grid !! r !! c == 0
+        ]
+      const2 a _ _ = a
+      part2 = sum [ evalState (depthFirstSearch (const2 ()) (const2 False) (r, c) grid ) ()
+        | r <- [0..length grid - 1]
+        , c <- [0..length (head grid) - 1]
+        , grid !! r !! c == 0
+        ]
+
+    in show <$> [part1, part2]
+}

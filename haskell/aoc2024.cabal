@@ -8,12 +8,15 @@ library
     default-extensions: TemplateHaskell, OverloadedStrings
     build-depends:    
       base,
+      comonad,
       containers,
       lens,
       megaparsec,
+      mtl,
       multimap,
       parsec,
       text ^>= 2.1.2,
+      vector-space,
     hs-source-dirs:   src
     default-language: GHC2021
 
