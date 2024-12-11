@@ -6,6 +6,7 @@ import Data.AdditiveGroup
 import Data.Char (digitToInt, intToDigit, isDigit)
 import Data.Foldable (toList)
 import Data.Functor (($>))
+import qualified Data.IntMap as IM
 import Data.Ix (inRange)
 import Data.List
 import qualified Data.List.NonEmpty as NE
@@ -468,17 +469,17 @@ day11 = Solution {
     day = 11
   , parser = decimal `sepBy` " "
   , solver = \stones -> let
-      state0 :: M.Map Int Int
-      state0 = M.fromListWith (+) [(x, 1) | x <- stones]
+      state0 :: IM.IntMap Int
+      state0 = IM.fromListWith (+) [(x, 1) | x <- stones]
       tupleToList (a, b) = [a, b]
       step :: Int -> [Int]
       step 0 = [1]
       step x = case numDigits x :: Int of
         d | even d -> tupleToList $ divMod x (10^(d `div` 2))
           | otherwise -> [2024 * x]
-      stepAll xs = M.fromListWith (+) [(x', count) | (x, count) <- M.toList xs, x' <- step x]
+      stepAll xs = IM.fromListWith (+) [(x', count) | (x, count) <- IM.toList xs, x' <- step x]
       states = iterate stepAll state0
-      part1 = sum . M.elems $ states !! 25
-      part2 = sum . M.elems $ states !! 75
+      part1 = sum . IM.elems $ states !! 25
+      part2 = sum . IM.elems $ states !! 75
     in show <$> [part1, part2]
 }
