@@ -16,6 +16,7 @@ library
       multimap,
       parsec,
       text ^>= 2.1.2,
+      transformers,
       vector-space,
     hs-source-dirs:   src
     default-language: GHC2021

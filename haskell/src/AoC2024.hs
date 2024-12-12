@@ -1,17 +1,18 @@
 module AoC2024 where
 
+import Control.Monad (guard)
 import Control.Monad.State.Lazy
+import Control.Monad.Trans.Maybe
 import Control.Lens hiding ((<|), (|>), Empty, levels)
 import Data.AdditiveGroup
-import Data.Char (digitToInt, intToDigit, isDigit)
+import Data.Char (digitToInt)
 import Data.Foldable (toList)
-import Data.Functor (($>))
 import qualified Data.IntMap as IM
 import Data.Ix (inRange)
 import Data.List
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
-import Data.Maybe (fromMaybe, isJust, isNothing)
+import Data.Maybe (catMaybes, fromMaybe)
 import qualified Data.MultiMap as MM
 import qualified Data.Sequence as Seq
 import Data.Sequence (Seq(..), (<|), (|>))
@@ -302,6 +303,7 @@ reductions :: [a -> a -> a] -> [a] -> [a]
 reductions _ [] = []
 reductions ops xs = foldl1 (\a b -> ops <*> a <*> b) (pure <$> xs)
 
+numDigits :: (Integral a) => a -> a
 numDigits 0 = 0
 numDigits n = 1 + numDigits (n `div` 10)
 
@@ -483,3 +485,61 @@ day11 = Solution {
       part2 = sum . IM.elems $ states !! 75
     in show <$> [part1, part2]
 }
+
+-- DAY 12
+
+-- data PlotDimensions = PlotDimensions {
+--     area :: Int
+--   , fenceLength :: Int
+-- }
+-- dfs :: [String] -> Char -> S.Set (Int, Int) -> (Int, Int) -> Maybe (S.Set (Int, Int), (Int, Int))
+-- dfs grid plantType visited coord = let
+--   directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+--   neighbors = [(x, coord') | coord' <- [coord ^+^ d | d <- directions], Just x <- [grid !!? coord']]
+--   fence = length [() | (x, _) <- neighbors, x /= plantType]
+  
+up = (-1, 0)
+down = (1, 0)
+left = (0, -1)
+right = (0, 1)
+
+minBy f x y = if (f x <= f y) then x else y
+pairwise :: [a] -> [(a, a)]
+pairwise xs = zip xs (tail xs)
+
+dfs :: [String] -> (Int, Int) -> Char -> State (S.Set (Int, Int)) (Maybe (Int, Int, Int))
+dfs grid start c = do
+  visited <- gets (S.member start)
+  if visited then
+    return Nothing
+  else do
+    modify $ S.insert start
+    let neighbors = [start ^+^ step | step <-[up, down, left, right]]
+        fenceCount = length $ filter ((/= Just c) . (grid !!?)) neighbors
+        corners = pairwise [up, right, down, left, up]
+        isCorner :: (Int, Int) -> (Int, Int) -> Bool
+        isCorner a b = let
+            aSame = grid !!? (start ^+^ a) == Just c
+            bSame = grid !!? (start ^+^ b) == Just c
+            abSame = grid !!? (start ^+^ a ^+^ b) == Just c
+          in case (aSame, bSame, abSame) of
+            (True, True, False) -> True
+            (False, False, _) -> True
+            _ -> False
+        cornerCount = length $ filter (uncurry isCorner) corners
+        samePlot = [(idx, value) | idx <- neighbors, Just value <- [grid !!? idx], value == c]
+    searchResults <- traverse (uncurry (dfs grid)) samePlot
+    return . Just $ (fenceCount, cornerCount, 1) ^+^ sumV (catMaybes searchResults)
+
+day12 :: Solution [String]
+day12 = Solution {
+    day = 12
+  , parser = lines <$> takeRest
+  , solver = \grid -> let
+      coords = [(i, j) | (i, row) <- zip [0..] grid, j <- [0..length row - 1]]
+      plotStats = catMaybes . flip evalState S.empty . sequenceA  $ [dfs grid (r, c) (grid !! r !! c) | (r, c) <- coords]
+      part1 = sum . fmap (\(fences, _, area) -> fences * area) $ plotStats
+      part2 = sum . fmap (\(_, corners, area) -> corners * area) $ plotStats
+    in show <$> [part1, part2]
+}
+
