@@ -19,6 +19,13 @@ import Data.Sequence (Seq(..), (<|), (|>))
 import qualified Data.Set as S
 import Data.Maybe (fromJust)
 import Data.Void (Void)
+import Linear.V2
+import Linear.V3
+import Linear.Matrix hiding (transpose)
+import Linear.Metric
+import qualified Linear.Matrix as LM
+import Linear.Vector ((*^))
+import Safe
 import Text.Megaparsec 
   ( Parsec
   , anySingle
@@ -541,5 +548,40 @@ day12 = Solution {
       part1 = sum . fmap (\(fences, _, area) -> fences * area) $ plotStats
       part2 = sum . fmap (\(_, corners, area) -> corners * area) $ plotStats
     in show <$> [part1, part2]
+}
+
+-- DAY 13
+
+day13 :: Solution [(M32 Int)]
+day13 = Solution {
+    day = 13
+  , parser = let
+      equation = do
+        buttonA <- V2 <$> ("Button A: X+" *> decimal) <*> (", Y+" *> decimal) <* newline
+        buttonB <- V2 <$> ("Button B: X+" *> decimal) <*> (", Y+" *> decimal) <* newline
+        prize <- V2 <$> ("Prize: X=" *> decimal) <*> (", Y=" *> decimal)
+        return $ V3 buttonA buttonB prize
+    in equation `sepEndBy1` (many newline)
+  , solver = \equations -> let
+      cost = dot $ V2 3 1
+      wholeRatio :: Int -> Int -> Maybe Int
+      wholeRatio 0 0 = Just 0
+      wholeRatio _ 0 = Nothing
+      wholeRatio a b = case a `divMod` b of
+        (r, 0) | r > 0 -> Just r
+        _ -> Nothing
+      wholeRatioV2 :: V2 Int -> V2 Int -> Maybe Int
+      wholeRatioV2 a b = case (wholeRatio (a ^._x) (b ^._x), wholeRatio (a ^._y) (b^._y)) of
+        (Just ra, Just 0) -> Just ra
+        (Just 0, Just rb) -> Just rb
+        (Just ra, Just rb) | ra == rb -> Just ra
+        _ -> Nothing
+      solutions :: M32 Int -> [V2 Int]
+      solutions (V3 a b target) = [V2 i j | i <- [0..100], Just j <- [wholeRatioV2 (target - (i*^a)) b]]
+
+      minimumOnMay f = minimumByMay (\a b -> compare (f a) (f b))
+      bestSolutions = [minimumOnMay cost [s | s <- solutions eq] | eq <- equations]
+      part1 = sum $ [cost solution | solution <- catMaybes bestSolutions]
+    in [show part1]
 }
 
