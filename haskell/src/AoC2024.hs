@@ -14,6 +14,7 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
 import Data.Maybe (catMaybes, fromMaybe)
 import qualified Data.MultiMap as MM
+import Data.Ratio
 import qualified Data.Sequence as Seq
 import Data.Sequence (Seq(..), (<|), (|>))
 import qualified Data.Set as S
@@ -552,7 +553,7 @@ day12 = Solution {
 
 -- DAY 13
 
-day13 :: Solution [(M32 Int)]
+day13 :: Solution [(M22 Int, V2 Int)]
 day13 = Solution {
     day = 13
   , parser = let
@@ -560,28 +561,27 @@ day13 = Solution {
         buttonA <- V2 <$> ("Button A: X+" *> decimal) <*> (", Y+" *> decimal) <* newline
         buttonB <- V2 <$> ("Button B: X+" *> decimal) <*> (", Y+" *> decimal) <* newline
         prize <- V2 <$> ("Prize: X=" *> decimal) <*> (", Y=" *> decimal)
-        return $ V3 buttonA buttonB prize
+        return $ (LM.transpose (V2 buttonA buttonB), prize)
     in equation `sepEndBy1` (many newline)
   , solver = \equations -> let
       cost = dot $ V2 3 1
-      wholeRatio :: Int -> Int -> Maybe Int
-      wholeRatio 0 0 = Just 0
-      wholeRatio _ 0 = Nothing
-      wholeRatio a b = case a `divMod` b of
-        (r, 0) | r > 0 -> Just r
-        _ -> Nothing
-      wholeRatioV2 :: V2 Int -> V2 Int -> Maybe Int
-      wholeRatioV2 a b = case (wholeRatio (a ^._x) (b ^._x), wholeRatio (a ^._y) (b^._y)) of
-        (Just ra, Just 0) -> Just ra
-        (Just 0, Just rb) -> Just rb
-        (Just ra, Just rb) | ra == rb -> Just ra
-        _ -> Nothing
-      solutions :: M32 Int -> [V2 Int]
-      solutions (V3 a b target) = [V2 i j | i <- [0..100], Just j <- [wholeRatioV2 (target - (i*^a)) b]]
-
-      minimumOnMay f = minimumByMay (\a b -> compare (f a) (f b))
-      bestSolutions = [minimumOnMay cost [s | s <- solutions eq] | eq <- equations]
-      part1 = sum $ [cost solution | solution <- catMaybes bestSolutions]
-    in [show part1]
+      solve1d a b c = help a b ++ help b a where
+        help x y = take 1 [V2 i j | i <- [0..x], let (j, rem) = (c - i * x) `divMod` y, rem == 0]
+      solve :: M22 Int -> V2 Int -> [V2 Int]
+      solve m y = if det22 m /= 0 then 
+          let solution = luSolveFinite (fmap (fmap fromIntegral) m) (fmap fromIntegral y) in
+            if (denominator <$> solution) == V2 1 1 then 
+              [numerator <$> solution] 
+            else []
+        else solve1d (sum (m ^. column _1)) (sum (m ^. column _2)) (sum y)
+      part1 = sum . catMaybes $ 
+        [ minimumMay [cost s | s <- solve m target] 
+        | (m, target) <- equations
+        ]
+      part2 = sum . catMaybes $ 
+        [ minimumMay [cost s | s <- solve m ((10000000000000+) <$> target)] 
+        | (m, target) <- equations
+        ]
+    in [show part1, show part2]
 }
 
