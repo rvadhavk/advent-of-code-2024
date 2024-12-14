@@ -23,7 +23,7 @@ import Data.Void (Void)
 import Linear.V2
 import Linear.V3
 import Linear.Matrix hiding (transpose)
-import Linear.Metric
+import Linear.Metric (dot, quadrance)
 import qualified Linear.Matrix as LM
 import Linear.Vector ((*^))
 import Safe
@@ -47,7 +47,7 @@ import Text.Megaparsec
   , takeRest
   )
 import Text.Megaparsec.Char (char, digitChar, newline, hspace)
-import Text.Megaparsec.Char.Lexer (decimal)
+import Text.Megaparsec.Char.Lexer (decimal, signed)
 
 
 -- Utilities for reading input and running solutions
@@ -566,7 +566,12 @@ day13 = Solution {
   , solver = \equations -> let
       cost = dot $ V2 3 1
       solve1d a b c = help a b ++ help b a where
-        help x y = take 1 [V2 i j | i <- [0..x], let (j, rem) = (c - i * x) `divMod` y, rem == 0]
+        help x y = take 1 
+          [ V2 i j 
+          | i <- [0..x]
+          , let (j, rem) = (c - i * x) `divMod` y
+          , rem == 0
+          ]
       solve :: M22 Int -> V2 Int -> [V2 Int]
       solve m y = if det22 m /= 0 then 
           let solution = luSolveFinite (fmap (fmap fromIntegral) m) (fmap fromIntegral y) in
@@ -582,6 +587,43 @@ day13 = Solution {
         [ minimumMay [cost s | s <- solve m ((10000000000000+) <$> target)] 
         | (m, target) <- equations
         ]
-    in [show part1, show part2]
+      solutions = [solve m target | (m, target) <- equations]
+    in show <$> [part1, part2]
 }
 
+
+-- DAY 14
+
+day14 :: Solution [M22 Int]
+day14 = Solution {
+    day = 14
+  , parser = let
+      int = signed (pure ()) decimal
+      intPair = V2 <$> int <* "," <*> int
+      pv = V2 <$> ("p=" *> intPair) <*> (" v=" *> intPair)
+    in sepEndBy1 pv newline
+  , solver = \state0 -> let
+      bounds = V2 101 103
+      middle = (`div` 2) <$> bounds
+      steps = [[mod <$> p + (i *^ v) <*> bounds | V2 p v <- state0] | i <- [0..]]
+      safetyFactor robotPositions = let
+          region p = compare <$> middle <*> p
+          countByRegion = M.fromListWith (+) [(region p, 1) | p <- robotPositions]
+        in product [count | (r, count) <- M.toList countByRegion, none (== EQ) r]
+      part1 = safetyFactor (steps !! 100)
+
+      visualize robotPositions = let
+          V2 cols rows = bounds
+          charForPosition p = if elem p robotPositions then '█' else ' '
+        in unlines [[charForPosition (V2 x y) | x <- [0..cols-1]] | y <- [0..rows-1]]
+      variance positions = sum squaredDifferences `div` n where
+        n = length positions
+        squaredDifferences = [quadrance (p - mean) | p <- positions]
+        mean = (`div` n) <$> sum positions
+      candidates = take 5 $ sortOn (variance . snd) (zip [0..] (take 10000 steps))
+      part2 = unlines 
+        [ concat ["Step ", show i, "\n", visualize positions, "\n"] 
+        | (i, positions) <- candidates
+        ]
+    in [show part1, part2]
+}
