@@ -1,18 +1,19 @@
 module AoC2024 where
 
-import Control.Monad (guard)
+import Control.Monad (guard, forM_)
 import Control.Monad.State.Lazy
 import Control.Monad.Trans.Maybe
 import Control.Lens hiding ((<|), (|>), Empty, levels)
+import Control.Lens.Fold
 import Data.AdditiveGroup
 import Data.Char (digitToInt)
 import Data.Foldable (toList)
 import qualified Data.IntMap as IM
 import Data.Ix (inRange)
-import Data.List
+import Data.List hiding (filter)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
-import Data.Maybe (catMaybes, fromMaybe)
+import Data.Maybe (fromMaybe)
 import qualified Data.MultiMap as MM
 import Data.Ratio
 import qualified Data.Sequence as Seq
@@ -26,6 +27,7 @@ import Linear.Matrix hiding (transpose)
 import Linear.Metric (dot, quadrance)
 import qualified Linear.Matrix as LM
 import Linear.Vector ((*^))
+import Prelude hiding (filter)
 import Safe
 import Text.Megaparsec 
   ( Parsec
@@ -36,6 +38,7 @@ import Text.Megaparsec
   , errorBundlePretty
   , many
   , notFollowedBy
+  , oneOf
   , optional
   , parse
   , parseTest
@@ -45,9 +48,11 @@ import Text.Megaparsec
   , sepEndBy1
   , some
   , takeRest
+  , try
   )
-import Text.Megaparsec.Char (char, digitChar, newline, hspace)
+import Text.Megaparsec.Char (char, digitChar, newline, hspace, space)
 import Text.Megaparsec.Char.Lexer (decimal, signed)
+import Witherable
 
 
 -- Utilities for reading input and running solutions
@@ -626,4 +631,113 @@ day14 = Solution {
         | (i, positions) <- candidates
         ]
     in [show part1, part2]
+}
+
+-- DAY 15
+
+data Cell = Robot | Box | Wall deriving (Eq, Show)
+
+
+flattenGrid :: [[a]] -> [(V2 Int, a)]
+flattenGrid xs = [(V2 r c, x) | ((r, c), x) <- itoListOf (ifolded <.> ifolded) xs]
+
+forEach :: Foldable t => t a -> b -> (b -> a -> b) -> b
+forEach xs initial f = foldl f initial xs
+
+charToCell = [('#', Wall), ('O', Box), ('@', Robot)]
+swap (a, b) = (b, a)
+cellToChar :: Cell -> Char
+cellToChar c = fromJust . lookup c . fmap swap $ charToCell
+
+day15part1 :: M.Map (V2 Int) Cell -> [V2 Int] -> Int
+day15part1 warehouse0 moves = let
+    move :: V2 Int -> V2 Int -> M.Map (V2 Int) Cell -> M.Map (V2 Int) Cell
+    move from to warehouse = M.insert to (warehouse M.! from) (M.delete from warehouse)
+    push :: V2 Int -> V2 Int -> M.Map (V2 Int) Cell -> M.Map (V2 Int) Cell
+    push coord dir warehouse = flip execState warehouse $ do
+      cell <- gets (M.lookup coord)
+      case cell of
+        Nothing -> return ()
+        Just Wall -> return ()
+        _ -> do
+          let inFront = coord + dir
+          modify $ push inFront dir
+          cantMove <- gets (M.member inFront)
+          if cantMove then return () else modify $ move coord inFront
+
+    visualize :: M.Map (V2 Int) Cell -> String
+    visualize warehouse = unlines [[charForCoord (V2 r c) | c <- [0..maxCol]] | r <- [0..maxRow]] where
+      charForCoord c = fromMaybe '.' (cellToChar <$> M.lookup c warehouse)
+      maxRow = maximum . fmap (^._1) . M.keys $ warehouse
+      maxCol = maximum . fmap (^._2) . M.keys $ warehouse
+    gps :: V2 Int -> Int
+    gps = dot (V2 100 1)
+    step warehouse dir = push robot dir warehouse where
+      robot = head [coord | (coord, Robot) <- M.toList warehouse]
+    states = scanl step warehouse0 moves 
+  in sum [gps coord | (coord, Box) <- M.toList (last states)]
+
+day15part2 warehouse0 moves = let
+    expandedWarehouse0 = 
+      [ (V2 (V2 r (2 * c)) (V2 1 width), cell) 
+      | (V2 r c, cell) <- M.toList warehouse0
+      , let width = if cell == Robot then 1 else 2
+      ]
+    inRegion coord (V2 corner size) = and ((<=) <$> corner <*> coord) && and ((<) <$> coord <*> corner + size) 
+    findAndDeleteAt :: V2 Int -> StateT [(M22 Int, Cell)] Maybe (M22 Int, Cell)
+    findAndDeleteAt coord = do
+      warehouse <- get 
+      x <- lift $ find (inRegion coord . fst) warehouse
+      modify $ delete x
+      return x
+    intersects1d :: V2 Int -> V2 Int -> Bool
+    intersects1d (V2 a1 a2) (V2 b1 b2) = b1 < a2 && a1 < b2
+    intersects :: M22 Int -> M22 Int -> Bool
+    intersects a b = and [intersects1d (range r a) (range r b) | r <- [_x, _y]] where
+      range axis bbox = V2 a (a + da) where
+        V2 a da = bbox ^. column axis
+
+    visualize warehouse = let
+        lowerRightCorners = [bbox^._1 + bbox^._2 | (bbox, _) <- warehouse]
+        rowMax = maximum . fmap (^._1) $ lowerRightCorners
+        colMax = maximum . fmap (^._2) $ lowerRightCorners
+      in unlines [ [ case cell of Just Robot -> '@'; Just Wall -> '#'; Just Box -> 'O'; Nothing -> '.'
+             | c <- [0..colMax]
+             , let cell = snd <$> find (inRegion (V2 r c) . fst) warehouse]
+           | r <- [0..rowMax]
+           ]
+    push :: V2 Int -> V2 Int -> StateT [(M22 Int, Cell)] Maybe ()
+    push coord dir = do
+      (bbox, cell) <- findAndDeleteAt coord
+      guard $ cell /= Wall
+      let bbox' = bbox & _1 %~ (+ dir)
+      obstacles <- gets $ filter ((intersects bbox') . fst)
+      forM_ obstacles (\((V2 corner  _), _) -> push corner dir)
+      modify ((bbox', cell):)
+
+    step :: [(M22 Int, Cell)] -> V2 Int -> [(M22 Int, Cell)]
+    step warehouse dir = let
+        Just (V2 robotCoord _, _) = find ((== Robot) . snd) warehouse
+        pushResult = execStateT (push robotCoord dir) warehouse
+      in fromMaybe warehouse pushResult
+    states = scanl step expandedWarehouse0 moves 
+  in sum [dot (V2 100 1) corner | (V2 corner _, Box) <- last states]
+  
+  
+
+day15 :: Solution (M.Map (V2 Int) Cell, [V2 Int])
+day15 = Solution {
+    day = 15
+  , parser = do
+      let validMapChars = '.':(fst <$> charToCell)
+      grid <- many (oneOf validMapChars) `sepBy1` newline 
+      let coordToChar = M.fromList (flattenGrid grid)
+          coordToCell = mapMaybe (`lookup` charToCell) coordToChar 
+      let charToMove = [('^', V2 (-1) 0), ('v', V2 1 0), ('<', V2 0 (-1)), ('>', V2 0 1)]
+          validMoveChars = fst <$> charToMove
+      moveString <- some $ (try (many newline *> oneOf validMoveChars))
+      let moves = mapMaybe (`lookup` charToMove) moveString
+      _ <- many newline
+      return (coordToCell, moves)
+  , solver = \(warehouse0, moves) -> [show $ f warehouse0 moves | f <- [day15part1, day15part2]]
 }
