@@ -21,6 +21,7 @@ import Data.Sequence (Seq(..), (<|), (|>))
 import qualified Data.Set as S
 import Data.Maybe (fromJust)
 import Data.Void (Void)
+import Debug.Trace
 import Linear.V2
 import Linear.V3
 import Linear.Matrix hiding (transpose)
@@ -740,4 +741,40 @@ day15 = Solution {
       _ <- many newline
       return (coordToCell, moves)
   , solver = \(warehouse0, moves) -> [show $ f warehouse0 moves | f <- [day15part1, day15part2]]
+}
+
+-- DAY 16
+
+
+dijkstras :: (Foldable t, Ord n, Ord c, Monoid c, Show n, Show c) => (n -> t (n, c)) -> n -> M.Map n c
+dijkstras outs start = go (S.singleton (mempty, start)) M.empty where
+  go queue result = case S.minView queue of
+    Nothing -> result
+    Just ((c, n), queue') 
+      | M.member n result -> go queue' result
+      | otherwise -> let
+         newQueueMembers = S.fromList [(c <> c', n') | (n', c') <- toList (outs n)]
+       in go (S.union newQueueMembers queue') (M.insert n c result)
+
+day16 :: Solution (S.Set (V2 Int), V2 Int, V2 Int)
+day16 = Solution {
+    day = 16
+  , parser = do
+      grid <- flattenGrid . lines <$> takeRest
+      let walkable = S.fromList [coord | (coord, c) <- grid, c /= '#']
+          start = head [coord | (coord, 'S') <- grid]
+          end = head [coord | (coord, 'E') <- grid]
+      return (walkable, start, end)
+  , solver = \(walkable, start, end) -> let
+      outEdges :: M22 Int -> [(M22 Int, (Sum Int))]
+      outEdges (V2 coord dir) = forward ++ [turnLeft, turnRight] where
+        forward = if S.member (coord + dir) walkable 
+          then [(V2 (coord + dir) dir, Sum 1)]
+          else []
+        turnLeft = (V2 coord (perp dir), Sum 1000)
+        turnRight = (V2 coord (negate $ perp dir), Sum 1000)
+      costs :: M.Map (M22 Int) (Sum Int)
+      costs = dijkstras outEdges (V2 start (V2 0 1))
+      part1 = minimum [getSum cost | (V2 coord _, cost) <- M.toList costs, coord == end]
+    in [show part1]
 }

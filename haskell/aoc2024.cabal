@@ -20,6 +20,7 @@ library
       text ^>= 2.1.2,
       transformers,
       vector-space,
+      witherable,
     hs-source-dirs:   src
     default-language: GHC2021
 
