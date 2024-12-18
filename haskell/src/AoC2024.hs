@@ -134,7 +134,7 @@ day2 = Solution {
   solver = (\reports -> let
       isSafePart1 [] = True
       isSafePart1 levels = strictlyOrdered && all (inRange (1, 3) . abs) diffs where
-        diffs = zipWith (-) (drop 1 levels) levels
+        diffs = zipWith (-) (tailSafe levels) levels
         strictlyOrdered = all (> 1) diffs || all (< 0) diffs
       part1 = length . filter isSafePart1 $ reports
       isSafePart2 levels = any isSafePart1 (levels:(remove1 levels))
@@ -164,7 +164,7 @@ day3 = Solution {
       part1 = sum [product args | Mul args <- instructions]
       -- at each instruction, figure out whether Muls are enabled/disabled
       enabled :: [Bool] 
-      enabled = drop 1 . scanl updateEnabled True $ instructions where
+      enabled = tailSafe . scanl updateEnabled True $ instructions where
         updateEnabled prev (Mul _) = prev -- Muls don't change enabled/disabled state
         updateEnabled _ Enable = True
         updateEnabled _ Disable = False
@@ -850,7 +850,6 @@ day18 = Solution {
   , solver = \obstacles -> let
       bounds = V2 70 70 
       inBounds x = and ((<=) <$> zero <*> x) && and ((<=) <$> x <*> bounds)
-      obstacleSets = drop 1 $ scanl (flip S.insert) S.empty obstacles
       dirs = [V2 0 1, V2 1 0, V2 0 (-1), V2 (-1) 0]
       next obstacleSet coord = 
         [ coord' 
@@ -859,6 +858,7 @@ day18 = Solution {
         , inBounds coord'
         , not $ S.member coord' obstacleSet
         ]
+      obstacleSets = tailSafe $ scanl (flip S.insert) S.empty obstacles
       searches = [bfs (next x) zero | x <- obstacleSets]
       part1 = findIndex (S.member bounds) (searches !! 1024)
       part2 = headMay [ obstacle
