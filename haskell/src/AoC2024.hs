@@ -1,6 +1,6 @@
 module AoC2024 where
 
-import Control.Monad (guard, forM_)
+import Control.Monad (guard, forM, forM_)
 import Control.Monad.State.Lazy
 import Control.Monad.Trans.Maybe
 import Control.Lens hiding ((<|), (|>), Empty, levels)
@@ -28,7 +28,7 @@ import Linear.V3
 import Linear.Matrix hiding (transpose)
 import Linear.Metric (dot, quadrance)
 import qualified Linear.Matrix as LM
-import Linear.Vector ((*^))
+import Linear.Vector ((*^), zero)
 import Prelude hiding (filter)
 import Safe
 import Text.Megaparsec 
@@ -832,4 +832,40 @@ day17 = Solution {
       part1 = unfoldr step a0
       part2 = head $ search 0 (reverse program)
     in [show part1, show part2]
+}
+
+-- DAY 18
+bfs :: (Foldable t, Ord a) => (a -> t a) -> a -> [S.Set a]
+bfs next start = unfoldr step (S.singleton start, S.empty) where
+  step (frontier, visited) 
+    | S.null frontier = Nothing
+    | otherwise = Just (frontier, (frontier', visited')) where
+      visited' = S.union frontier visited
+      frontier' = S.fromList (concat [ toList (next n) | n <- toList frontier]) S.\\ visited'
+
+day18 :: Solution [V2 Int]
+day18 = Solution {
+    day = 18
+  , parser = (V2 <$> decimal <* ","  <*> decimal) `sepEndBy1` newline
+  , solver = \obstacles -> let
+      bounds = V2 70 70 
+      inBounds x = and ((<=) <$> zero <*> x) && and ((<=) <$> x <*> bounds)
+      obstacleSets = drop 1 $ scanl (flip S.insert) S.empty obstacles
+      dirs = [V2 0 1, V2 1 0, V2 0 (-1), V2 (-1) 0]
+      next obstacleSet coord = 
+        [ coord' 
+        | step <- dirs, 
+        let coord' = coord + step
+        , inBounds coord'
+        , not $ S.member coord' obstacleSet
+        ]
+      searches = [bfs (next x) zero | x <- obstacleSets]
+      part1 = findIndex (S.member bounds) (searches !! 1024)
+      part2 = headMay [ obstacle
+                      | (obstacle, search) <- zip obstacles searches
+                      , none (S.member bounds) search
+                      ]
+    in [show part1, show part2]
+
+      
 }
