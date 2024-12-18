@@ -6,6 +6,7 @@ import Control.Monad.Trans.Maybe
 import Control.Lens hiding ((<|), (|>), Empty, levels)
 import Control.Lens.Fold
 import Data.AdditiveGroup
+import Data.Bits
 import Data.Char (digitToInt)
 import Data.Foldable (toList)
 import qualified Data.IntMap as IM
@@ -33,6 +34,7 @@ import Safe
 import Text.Megaparsec 
   ( Parsec
   , anySingle
+  , anySingleBut
   , between
   , choice
   , eof
@@ -797,5 +799,37 @@ day16 = Solution {
                    , path <- paths
                    ]
       part2 = countUnique . concat $ pathsToEnd
+    in [show part1, show part2]
+}
+
+-- DAY 17
+
+line = many (anySingleBut '\n') <* newline
+
+day17 :: Solution (Int, [Int])
+day17 = Solution {
+    day = 17
+  , parser = do
+      a <- "Register A: " *> decimal <* newline
+      _ <- sequenceA [line, line, line]
+      program <- "Program: " *> (decimal `sepBy` ",")
+      return $ (a, program)
+  , solver = \(a0, program) -> let
+      output a = let
+          b = (a .&. 0b111) .^. 0b011
+          c = ((a .>>. b) .&. 0b111) .^. 0b101
+        in b .^. c
+      step 0 = Nothing
+      step a = Just (output a, a .>>. 3)
+      search :: Int -> [Int] -> [Int]
+      search a [] = [a]
+      search a (x:xs) = [ result 
+                        | i <- [0..7]
+                        , let a' = (a .<<. 3) + i
+                        , output a' == x
+                        , result <- search a' xs
+                        ]
+      part1 = unfoldr step a0
+      part2 = head $ search 0 (reverse program)
     in [show part1, show part2]
 }
