@@ -756,6 +756,19 @@ dijkstras outs start = go (S.singleton (mempty, start)) M.empty where
          newQueueMembers = S.fromList [(c <> c', n') | (n', c') <- toList (outs n)]
        in go (S.union newQueueMembers queue') (M.insert n c result)
 
+dijkstrasAllPaths :: (Foldable t, Ord n, Ord c, Monoid c, Show n, Show c) => (n -> t (n, c)) -> n -> M.Map n (c, [[n]])
+dijkstrasAllPaths outs start = go (S.singleton (mempty, [start])) M.empty where
+  go queue result = case S.minView queue of
+    Nothing -> result
+    Just ((c, path@(n:ns)), queue') -> let
+        newQueueMembers = S.fromList [(c <> c', (n':path)) | (n', c') <- toList (outs n)]
+        queue'' = S.union newQueueMembers queue'
+      in case M.lookup n result of
+        Nothing -> go queue'' (M.insert n (c, [path]) result)
+        Just (minCost, paths) 
+          | c == minCost -> go queue'' (M.adjust (_2 %~ (path:)) n result)
+          | otherwise -> go queue' result
+
 day16 :: Solution (S.Set (V2 Int), V2 Int, V2 Int)
 day16 = Solution {
     day = 16
@@ -776,5 +789,13 @@ day16 = Solution {
       costs :: M.Map (M22 Int) (Sum Int)
       costs = dijkstras outEdges (V2 start (V2 0 1))
       part1 = minimum [getSum cost | (V2 coord _, cost) <- M.toList costs, coord == end]
-    in [show part1]
+
+      allPaths = dijkstrasAllPaths outEdges (V2 start (V2 0 1))
+      pathsToEnd = [ path & mapped %~ (^. _1)
+                   | ((V2 coord _), (_, paths)) <- M.toList allPaths
+                   , coord == end
+                   , path <- paths
+                   ]
+      part2 = countUnique . concat $ pathsToEnd
+    in [show part1, show part2]
 }
