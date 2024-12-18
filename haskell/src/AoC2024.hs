@@ -9,6 +9,7 @@ import Data.AdditiveGroup
 import Data.Bits
 import Data.Char (digitToInt)
 import Data.Foldable (toList)
+import Data.Functor.Classes (eq1)
 import qualified Data.IntMap as IM
 import Data.Ix (inRange)
 import Data.List hiding (filter)
@@ -20,6 +21,7 @@ import Data.Ratio
 import qualified Data.Sequence as Seq
 import Data.Sequence (Seq(..), (<|), (|>))
 import qualified Data.Set as S
+import Data.Set.Lens
 import Data.Maybe (fromJust)
 import Data.Void (Void)
 import Debug.Trace
@@ -836,36 +838,55 @@ day17 = Solution {
 
 -- DAY 18
 bfs :: (Foldable t, Ord a) => (a -> t a) -> a -> [S.Set a]
-bfs next start = unfoldr step (S.singleton start, S.empty) where
+bfs neighbors start = unfoldr step (S.singleton start, S.empty) where
   step (frontier, visited) 
     | S.null frontier = Nothing
     | otherwise = Just (frontier, (frontier', visited')) where
       visited' = S.union frontier visited
-      frontier' = S.fromList (concat [ toList (next n) | n <- toList frontier]) S.\\ visited'
+      frontier' = S.fromList (concat [ toList (neighbors n) | n <- toList frontier]) S.\\ visited'
 
+findM :: (Foldable t, Monad m) => (a -> m Bool) -> t a -> m (Maybe a)
+findM predicate xs = go (toList xs) where
+  go [] = return Nothing
+  go (y:ys) = do
+    found <- predicate y
+    if found 
+      then return $ Just y
+      else go ys
+  
 day18 :: Solution [V2 Int]
 day18 = Solution {
     day = 18
   , parser = (V2 <$> decimal <* ","  <*> decimal) `sepEndBy1` newline
   , solver = \obstacles -> let
-      bounds = V2 70 70 
+      mapSize = 70
+      bounds = V2 mapSize mapSize
       inBounds x = and ((<=) <$> zero <*> x) && and ((<=) <$> x <*> bounds)
       dirs = [V2 0 1, V2 1 0, V2 0 (-1), V2 (-1) 0]
-      next obstacleSet coord = 
+      obstacleSet = S.fromList $ take 1024 obstacles
+      cardinalNeighbors coord = 
         [ coord' 
         | step <- dirs, 
         let coord' = coord + step
         , inBounds coord'
         , not $ S.member coord' obstacleSet
         ]
-      obstacleSets = tailSafe $ scanl (flip S.insert) S.empty obstacles
-      searches = [bfs (next x) zero | x <- obstacleSets]
-      part1 = findIndex (S.member bounds) (searches !! 1024)
-      part2 = headMay [ obstacle
-                      | (obstacle, search) <- zip obstacles searches
-                      , none (S.member bounds) search
-                      ]
-    in [show part1, show part2]
+      part1 = findIndex (S.member bounds) (bfs cardinalNeighbors zero)
 
-      
+      mapSpan = S.fromList [0..70]
+      isBlockingPath :: S.Set (V2 Int) -> Bool
+      isBlockingPath xs = or [ eq1 mapSpan (over setmapped (^. dim) xs) | dim <- [_x, _y]]
+      addingBlocksPath :: V2 Int -> State [S.Set (V2 Int)] Bool
+      addingBlocksPath o = do
+        let neighbors = S.fromList [ o + (V2 dx dy) 
+                                   | dx <- [-1..1]
+                                   , dy <- [-1..1]
+                                   , dx /= 0 || dy /= 0
+                                   ]
+        (otherGroups, connectedToO) <- gets $ partition (S.disjoint neighbors)
+        let newGroup = S.insert o (S.unions connectedToO)
+        put $ newGroup:otherGroups
+        return $ isBlockingPath newGroup
+      part2 = evalState (findM addingBlocksPath obstacles) []
+    in [show part1, show part2]
 }
