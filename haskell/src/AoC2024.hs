@@ -1,5 +1,6 @@
 module AoC2024 where
 
+import System.IO.Unsafe
 import Control.Monad (guard, forM, forM_)
 import Control.Monad.State.Lazy
 import Control.Monad.Trans.Maybe
@@ -15,7 +16,7 @@ import Data.Ix (inRange)
 import Data.List hiding (filter)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isJust)
 import qualified Data.MultiMap as MM
 import Data.Ratio
 import qualified Data.Sequence as Seq
@@ -37,6 +38,7 @@ import Text.Megaparsec
   ( Parsec
   , anySingle
   , anySingleBut
+  , atEnd
   , between
   , choice
   , eof
@@ -46,6 +48,7 @@ import Text.Megaparsec
   , oneOf
   , optional
   , parse
+  , parseMaybe
   , parseTest
   , sepBy
   , sepBy1
@@ -55,7 +58,7 @@ import Text.Megaparsec
   , takeRest
   , try
   )
-import Text.Megaparsec.Char (char, digitChar, newline, hspace, space)
+import Text.Megaparsec.Char (char, digitChar, newline, hspace, space, string)
 import Text.Megaparsec.Char.Lexer (decimal, signed)
 import Witherable
 
@@ -845,6 +848,32 @@ bfs neighbors start = unfoldr step (S.singleton start, S.empty) where
       visited' = S.union frontier visited
       frontier' = S.fromList (concat [ toList (neighbors n) | n <- toList frontier]) S.\\ visited'
 
+existsPath :: (Foldable t, Ord a) => (a -> t a) -> a -> a -> Bool
+existsPath neighbors start end = evalState (canReachEndFrom start) S.empty where
+  canReachEndFrom n 
+    | n == end = return True
+    | otherwise = do
+        visited <- gets $ S.member n
+        if visited then
+          return False
+        else do
+          modify $ S.insert n
+          anyM canReachEndFrom (neighbors n)
+
+partitionPoint :: (a -> Bool) -> [a] -> Maybe Int
+partitionPoint p xs = if result == length xs then Nothing else Just result where
+  result = go 0 (length xs)
+  go lo hi
+    | lo == hi = lo
+    | otherwise = let
+        mid = (lo + hi) `div` 2
+      in if p (xs !! mid) 
+        then go (mid + 1) hi
+        else go lo mid
+           
+anyM :: (Foldable t, Monad m) => (a -> m Bool) -> t a -> m Bool
+anyM predicate xs = isJust <$> findM predicate xs
+
 findM :: (Foldable t, Monad m) => (a -> m Bool) -> t a -> m (Maybe a)
 findM predicate xs = go (toList xs) where
   go [] = return Nothing
@@ -863,16 +892,18 @@ day18 = Solution {
       bounds = V2 mapSize mapSize
       inBounds x = and ((<=) <$> zero <*> x) && and ((<=) <$> x <*> bounds)
       dirs = [V2 0 1, V2 1 0, V2 0 (-1), V2 (-1) 0]
-      obstacleSet = S.fromList $ take 1024 obstacles
-      cardinalNeighbors coord = 
+      obstacleSets = tailSafe $ scanl (flip S.insert) S.empty obstacles 
+      reachableNeighbors obstacles coord = 
         [ coord' 
         | step <- dirs, 
         let coord' = coord + step
         , inBounds coord'
-        , not $ S.member coord' obstacleSet
+        , not $ S.member coord' obstacles
         ]
-      part1 = findIndex (S.member bounds) (bfs cardinalNeighbors zero)
+      part1 = findIndex (S.member bounds) (bfs getNeighbors zero) where
+        getNeighbors = reachableNeighbors (obstacleSets !! 1024)
 
+      -- Part 2 Approach 1: Linear Search with Union-Find
       mapSpan = S.fromList [0..70]
       isBlockingPath :: S.Set (V2 Int) -> Bool
       isBlockingPath xs = or [ eq1 mapSpan (over setmapped (^. dim) xs) | dim <- [_x, _y]]
@@ -887,6 +918,42 @@ day18 = Solution {
         let newGroup = S.insert o (S.unions connectedToO)
         put $ newGroup:otherGroups
         return $ isBlockingPath newGroup
+      blockList = evalState (traverse addingBlocksPath obstacles) []
       part2 = evalState (findM addingBlocksPath obstacles) []
+
+      -- Part 2, Approach 2: Binary Search with Depth First Search
+      openAtStep = [ existsPath getNeighbors zero bounds 
+                   | obstacles <- obstacleSets
+                   , let getNeighbors = reachableNeighbors obstacles
+                   ]
+      firstBlockIdx = partitionPoint id openAtStep
+      part2' = (obstacles !!) <$> firstBlockIdx
+
+    in [show part2']
+}
+
+-- DAY 19
+
+day19 :: Solution ([String], [String])
+day19 = Solution {
+    day = 19
+  , parser = do
+    let pattern = some (oneOf ("wubrg" :: String))
+    towels <- pattern `sepBy` ", "
+    _ <- some newline
+    designs <- pattern `sepEndBy1` newline
+    return (towels, designs)
+  , solver = \(towels, designs) -> let
+      numArrangements :: String -> Int
+      numArrangements design = head $ go design where
+        go "" = [1]
+        go x@(_:rest) = (sum [countWithPrefix t | t <- towels]):suffixCounts where
+          suffixCounts = go rest
+          countWithPrefix t 
+            | t `isPrefixOf` x = suffixCounts !! (length t - 1)
+            | otherwise = 0
+
+      part1 = length . filter ((/= 0) . numArrangements) $ designs
+      part2 = sum . fmap numArrangements $ designs
     in [show part1, show part2]
 }
