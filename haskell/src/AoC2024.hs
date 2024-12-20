@@ -15,6 +15,7 @@ import qualified Data.IntMap as IM
 import Data.Ix (inRange)
 import Data.List hiding (filter)
 import qualified Data.List.NonEmpty as NE
+import Data.Map ((!))
 import qualified Data.Map as M
 import Data.Maybe (fromMaybe, isJust)
 import qualified Data.MultiMap as MM
@@ -660,7 +661,7 @@ cellToChar c = fromJust . lookup c . fmap swap $ charToCell
 day15part1 :: M.Map (V2 Int) Cell -> [V2 Int] -> Int
 day15part1 warehouse0 moves = let
     move :: V2 Int -> V2 Int -> M.Map (V2 Int) Cell -> M.Map (V2 Int) Cell
-    move from to warehouse = M.insert to (warehouse M.! from) (M.delete from warehouse)
+    move from to warehouse = M.insert to (warehouse ! from) (M.delete from warehouse)
     push :: V2 Int -> V2 Int -> M.Map (V2 Int) Cell -> M.Map (V2 Int) Cell
     push coord dir warehouse = flip execState warehouse $ do
       cell <- gets (M.lookup coord)
@@ -957,3 +958,51 @@ day19 = Solution {
       part2 = sum . fmap numArrangements $ designs
     in [show part1, show part2]
 }
+
+ -- DAY 20
+
+nAway :: Int -> S.Set (V2 Int)
+nAway n = S.fromList . concat . take 4 $ iterate (fmap perp) [V2 x (n - x) | x <- [0..n]]
+
+l1Norm = sum . fmap abs
+l1Dist a b = l1Norm (a - b)
+
+day20 = Solution {
+    day = 20
+  , parser = do
+      grid <- flattenGrid . lines <$> takeRest
+      let start = head [coord | (coord, 'S') <- grid] 
+          end = head [coord | (coord, 'E') <- grid]
+          walkable = S.fromList [coord | (coord, x) <- grid, elem x (".SE" :: String)]
+      return (start, end, walkable)
+  , solver = \(start, end, walkable) -> let
+      -- computes the set of nodes n steps away from node x
+      stepsAwayFrom n x = S.intersection (S.mapMonotonic (x + ) (nAway n)) walkable
+      -- bfs returns a [S.Set (V2 Int)], essential a mapping from (distance from start -> set of coords)
+      -- this converts to a mapping from (coord -> distance from start)
+      indexByCoord :: [S.Set (V2 Int)] -> M.Map (V2 Int) Int
+      indexByCoord steps = M.fromList [ (coord, dist) 
+                                      | (dist, frontier) <- zip [0..] steps
+                                      , coord <- toList frontier]
+      -- If we know the distances start->n0 and n1->end, we can figure out the
+      -- potential savings of phasing through walls from n0->n1
+      distFromStart = indexByCoord $ bfs (1 `stepsAwayFrom`) start
+      distToEnd = indexByCoord $ bfs (1 `stepsAwayFrom`) end
+      baseline = distFromStart ! end
+      -- amount saved by phasing from n0 to n1
+      shortcutSavings n0 n1 = baseline - newCost where
+        newCost = (distFromStart ! n0) + l1Dist n1 n0 + (distToEnd ! n1)
+      -- computes the savings from phasing between all pairs of nodes within
+      -- manhattan distance of 20 of eachother
+      cheats = [ (duration, shortcutSavings n0 n1)
+               | n0 <- toList walkable
+               , n1 <- toList walkable
+               , let duration = l1Dist n1 n0
+               , duration <= 20
+               ]
+      part1 = length [stepsSaved | (2, stepsSaved) <- cheats, stepsSaved >= 100]
+      savings = snd <$> cheats
+      part2 = length $ filter (>= 100) savings
+    in [show part1, show part2]
+}
+
