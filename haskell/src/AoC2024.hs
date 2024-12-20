@@ -961,8 +961,8 @@ day19 = Solution {
 
  -- DAY 20
 
-nAway :: Int -> S.Set (V2 Int)
-nAway n = S.fromList . concat . take 4 $ iterate (fmap perp) [V2 x (n - x) | x <- [0..n]]
+l1Diamond :: Int -> S.Set (V2 Int)
+l1Diamond n = S.fromList . concat . take 4 $ iterate (fmap perp) [V2 x (n - x) | x <- [0..n]]
 
 l1Norm = sum . fmap abs
 l1Dist a b = l1Norm (a - b)
@@ -977,7 +977,7 @@ day20 = Solution {
       return (start, end, walkable)
   , solver = \(start, end, walkable) -> let
       -- computes the set of nodes n steps away from node x
-      stepsAwayFrom n x = S.intersection (S.mapMonotonic (x + ) (nAway n)) walkable
+      stepsAwayFrom n x = S.intersection (S.mapMonotonic (x + ) (l1Diamond n)) walkable
       -- bfs returns a [S.Set (V2 Int)], essential a mapping from (distance from start -> set of coords)
       -- this converts to a mapping from (coord -> distance from start)
       indexByCoord :: [S.Set (V2 Int)] -> M.Map (V2 Int) Int
