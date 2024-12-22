@@ -1068,3 +1068,30 @@ paths layout key0 key1 = let
            (if validKeyAt (coord0 + (V2 0 dc)) then [cKeys ++ rKeys] else [])
 
 
+-- DAY 22
+
+stepSecret :: Int -> Int
+stepSecret x = foldl substep x [(.<<. 6), (.>>. 5), (.<<. 11)] where
+  substep :: Int -> (Int -> Int) -> Int
+  substep n op = (op n .^. n) .&. 0xFFFFFF
+
+slidingWindow :: Int -> [a] -> [[a]]
+slidingWindow n = transpose . take n . tails
+                   
+sequenceToPrice prices = M.fromListWith (\_ b -> b) (zip sequences (drop 4 prices)) where
+  priceDiffs = [b - a | (a, b) <- pairwise prices]
+  sequences = slidingWindow 4 priceDiffs
+
+day22 :: Solution [Int]
+day22 = Solution {
+    day = 22
+  , parser = decimal `sepEndBy1` newline
+  , solver = \initialSecrets -> let
+      part1 = sum [iterate stepSecret s0 !! 2000 | s0 <- initialSecrets]
+      buyerPrices s0 = iterate stepSecret s0
+                        & fmap (`mod` 10)
+                        & take 2000
+      prices = [ buyerPrices s0 | s0 <- initialSecrets]
+      part2 = maximum $ foldl (M.unionWith (+)) M.empty [sequenceToPrice p | p <- prices]
+    in [show part1, show part2]
+}
