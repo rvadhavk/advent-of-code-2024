@@ -1076,7 +1076,10 @@ stepSecret x = foldl substep x [(.<<. 6), (.>>. 5), (.<<. 11)] where
   substep n op = (op n .^. n) .&. 0xFFFFFF
 
 slidingWindow :: Int -> [a] -> [[a]]
-slidingWindow n = transpose . take n . tails
+slidingWindow n xs = tails xs
+                   & take n
+                   & transpose
+                   & takeWhile ((== n) . length)
                    
 sequenceToPrice :: [Int] -> Map [Int] Int
 sequenceToPrice prices = M.fromListWith (\_ b -> b) (zip sequences (drop 4 prices)) where
