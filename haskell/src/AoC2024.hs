@@ -8,7 +8,7 @@ import Control.Lens hiding ((<|), (|>), Empty, levels)
 import Control.Lens.Fold
 import Data.AdditiveGroup
 import Data.Bits
-import Data.Char (digitToInt)
+import Data.Char (digitToInt, isDigit)
 import Data.Foldable (toList)
 import Data.Functor.Classes (eq1)
 import qualified Data.IntMap as IM
@@ -1005,4 +1005,66 @@ day20 = Solution {
       part2 = length $ filter (>= 100) savings
     in [show part1, show part2]
 }
+
+-- DAY 21
+
+day21 :: Solution [String]
+day21 = Solution {
+    day = 21
+  , parser = lines <$> takeRest
+  , solver = \codes -> let
+      solve levels = sum [complexity c | c <- codes] where
+        finalKeypadCost = iterate (keyCost keypad) M.empty !! levels
+        numpadCost = keyCost numpad finalKeypadCost
+        complexity code = codeCost numpadCost code * numericPart code
+        numericPart code = read (takeWhile isDigit code) :: Int
+      part1 = solve 2
+      part2 = solve 25
+    in [show part1, show part2]
+}
+
+project :: V2 Int -> Lens' (V2 Int) Int -> V2 Int
+project v axis = zero & axis .~ (v ^. axis)
+
+findIndex2d :: Eq a => a -> [[a]] -> Maybe (V2 Int)
+findIndex2d x xs = flattenGrid xs
+   & find (\y -> snd y == x)
+  <&> fst
+
+numpad = [ "789"
+         , "456"
+         , "123"
+         , " 0A"
+         ]
+keypad = [ " ^A"
+         , "<v>"
+         ]
+
+codeCost :: M.Map (Char, Char) Int -> String -> Int
+codeCost moveCost code = sum [ M.findWithDefault 1 pair moveCost 
+                             | pair <- pairwise ('A':code)]
+
+keyCost :: [String] -> M.Map (Char, Char) Int -> M.Map (Char, Char) Int
+keyCost layout parentCost = M.fromList $ do
+  let keys = [key | row <- layout, key <- row, key /= ' ']
+  (key0, key1) <- (,) <$> keys <*> keys
+  let parentCodeCosts = [ codeCost parentCost (path ++ "A")
+                        | path <- paths layout key0 key1
+                        ]
+  return ((key0, key1), minimum parentCodeCosts)
+
+
+paths :: [String] -> Char -> Char -> [String]
+paths layout key0 key1 = let
+    coord0 = fromJust $ findIndex2d key0 layout
+    coord1 = fromJust $ findIndex2d key1 layout
+    delta@(V2 dr dc) = coord1 - coord0
+    rKey = if dr < 0 then '^' else 'v'
+    cKey = if dc < 0 then '<' else '>'
+    validKeyAt (V2 r c) = layout !! r !! c /= ' '
+    rKeys = replicate (abs dr) rKey
+    cKeys = replicate (abs dc) cKey
+  in nub $ (if validKeyAt (coord0 + (V2 dr 0)) then [rKeys ++ cKeys] else []) ++
+           (if validKeyAt (coord0 + (V2 0 dc)) then [cKeys ++ rKeys] else [])
+
 
