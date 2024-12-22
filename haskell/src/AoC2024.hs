@@ -15,7 +15,7 @@ import qualified Data.IntMap as IM
 import Data.Ix (inRange)
 import Data.List hiding (filter)
 import qualified Data.List.NonEmpty as NE
-import Data.Map ((!))
+import Data.Map (Map, (!))
 import qualified Data.Map as M
 import Data.Maybe (fromMaybe, isJust)
 import qualified Data.MultiMap as MM
@@ -1078,6 +1078,7 @@ stepSecret x = foldl substep x [(.<<. 6), (.>>. 5), (.<<. 11)] where
 slidingWindow :: Int -> [a] -> [[a]]
 slidingWindow n = transpose . take n . tails
                    
+sequenceToPrice :: [Int] -> Map [Int] Int
 sequenceToPrice prices = M.fromListWith (\_ b -> b) (zip sequences (drop 4 prices)) where
   priceDiffs = [b - a | (a, b) <- pairwise prices]
   sequences = slidingWindow 4 priceDiffs
@@ -1087,11 +1088,9 @@ day22 = Solution {
     day = 22
   , parser = decimal `sepEndBy1` newline
   , solver = \initialSecrets -> let
-      part1 = sum [iterate stepSecret s0 !! 2000 | s0 <- initialSecrets]
-      buyerPrices s0 = iterate stepSecret s0
-                        & fmap (`mod` 10)
-                        & take 2000
-      prices = [ buyerPrices s0 | s0 <- initialSecrets]
+      secretStreams = [take 2000 $ iterate stepSecret s0 | s0 <- initialSecrets]
+      part1 = sum [last stream | stream <- secretStreams]
+      prices = [[x `mod` 10 | x <- stream] | stream <- secretStreams]
       part2 = maximum $ foldl (M.unionWith (+)) M.empty [sequenceToPrice p | p <- prices]
     in [show part1, show part2]
 }
