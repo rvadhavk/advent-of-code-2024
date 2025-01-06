@@ -11,6 +11,7 @@ import Data.Bits
 import Data.Char (digitToInt, isDigit)
 import Data.Foldable (toList)
 import Data.Functor.Classes (eq1)
+import Data.Graph (stronglyConnComp)
 import qualified Data.IntMap as IM
 import Data.Ix (inRange)
 import Data.List hiding (filter)
@@ -19,6 +20,7 @@ import Data.Map (Map, (!))
 import qualified Data.Map as M
 import Data.Maybe (fromMaybe, isJust)
 import qualified Data.MultiMap as MM
+import Data.Ord
 import Data.Ratio
 import qualified Data.Sequence as Seq
 import Data.Sequence (Seq(..), (<|), (|>))
@@ -36,7 +38,8 @@ import Linear.Vector ((*^), zero)
 import Prelude hiding (filter)
 import Safe
 import Text.Megaparsec 
-  ( Parsec
+  ( (<|>)
+  , Parsec
   , anySingle
   , anySingleBut
   , atEnd
@@ -59,7 +62,7 @@ import Text.Megaparsec
   , takeRest
   , try
   )
-import Text.Megaparsec.Char (char, digitChar, newline, hspace, space, string)
+import Text.Megaparsec.Char (alphaNumChar, char, digitChar, letterChar, newline, hspace, space, string)
 import Text.Megaparsec.Char.Lexer (decimal, signed)
 import Witherable
 
@@ -1097,3 +1100,89 @@ day22 = Solution {
       part2 = maximum $ foldl (M.unionWith (+)) M.empty [sequenceToPrice p | p <- prices]
     in [show part1, show part2]
 }
+
+-- DAY 23
+
+day23 :: Solution [(String, String)]
+day23 = Solution {
+    day = 23
+  , parser = let
+      edge = (,) <$> some letterChar <* "-" <*> some letterChar
+    in edge `sepEndBy1` newline
+  , solver = \edgeList -> let
+      nodes = setOf (each . each) edgeList
+      neighbors :: M.Map String (S.Set String)
+      neighbors = M.fromListWith (S.union) [ (n0, S.singleton n1) 
+                                           | edge <- edgeList
+                                           , (n0, n1) <- [edge, swap edge]
+                                           ]
+      cliques = iterate growClique [S.empty]
+      growClique cliques = [ S.insert node clique 
+                           | node <- toList nodes
+                           , clique <- cliques
+                           , all (< node) clique
+                           , clique `S.isSubsetOf` (neighbors ! node)
+                           ]
+      part1 = length . filter (any (isPrefixOf "t")) $ cliques !! 3
+      largestClique = head . last . takeWhile (not . null) $ cliques
+      part2 = intercalate "," . sort . toList $ largestClique
+    in [show part1, part2]
+}
+
+-- DAY 24
+data Node a = Constant a Int | Assignment {
+    result :: a
+  , operands :: (a, a)
+  , operator :: Int -> Int -> Int
+}
+
+nodeId (Constant x _) = x
+nodeId (Assignment x _ _) = x
+
+day24 :: Solution [Node String]
+day24 = Solution {
+   day = 24
+ , parser = do
+     let wire = some alphaNumChar
+         constant = Constant <$> (wire <* ": ") <*> decimal
+         bitop = ("AND" >> pure (.&.)) <|> ("XOR" >> pure (.^.)) <|> ("OR" >> pure (.|.))
+         assignment = do
+           in0 <- wire <* " "
+           op <- bitop <* " "
+           in1 <- wire <* " -> "
+           out <- wire
+           return $ Assignment out (in0, in1) op
+     constants <- constant `sepEndBy` newline
+     _ <- many newline
+     assignments <- try assignment `sepEndBy` newline
+     return $ constants ++ assignments
+  , solver = \nodes -> let
+      zs = sortOn Down . filter ("z" `isPrefixOf`) . fmap nodeId $ nodes
+      lookupId x = fromJust . find ((== x) . nodeId) $ nodes
+      evaluate x = let
+        node = lookupId x
+        in case node of
+          Constant _ y -> y
+          Assignment _ (a, b) op -> op (evaluate a) (evaluate b)
+      part1 = foldl (\acc x -> (acc .<<. 1) .|. x) 0 (evaluate <$> zs)
+    in [show part1]
+}
+
+
+-- DAY 25
+
+day25 = Solution {
+    day = 25
+  , parser = do
+      chunks <- some (notFollowedBy (newline *> newline) *> anySingle) `sepBy` (newline >> newline)
+      let grids = lines <$> chunks
+          (lockGrids, keyGrids) = partition (all (== '#') . head) grids
+          locks = [[(subtract 1) . length . takeWhile (== '#') $ row | row <- transpose grid] | grid <- lockGrids]
+          keys = [[(subtract 1) . length . takeWhile (== '#') . reverse $ row | row <- transpose grid] | grid <- keyGrids]
+      return (locks, keys)
+  , solver = \(locks, keys) -> let
+      compatible key lock = all (< 6) $ zipWith (+) key lock
+      part1 = length $ filter (uncurry compatible) [(l, k) | l <- locks, k <- keys]
+    in [show part1]
+}
+

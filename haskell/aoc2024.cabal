@@ -5,7 +5,7 @@ version:            0.1.0.0
 library
     ghc-options: -Wall -O
     exposed-modules:  AoC2024
-    default-extensions: TemplateHaskell, OverloadedStrings
+    default-extensions: TemplateHaskell, OverloadedStrings, RankNTypes, ImpredicativeTypes
     build-depends:    
       base,
       comonad,
