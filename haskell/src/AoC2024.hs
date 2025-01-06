@@ -1116,15 +1116,15 @@ day23 = Solution {
                                            | edge <- edgeList
                                            , (n0, n1) <- [edge, swap edge]
                                            ]
-      cliques = iterate growClique [S.empty]
-      growClique cliques = [ S.insert node clique 
-                           | node <- toList nodes
-                           , clique <- cliques
-                           , all (< node) clique
-                           , clique `S.isSubsetOf` (neighbors ! node)
-                           ]
-      part1 = length . filter (any (isPrefixOf "t")) $ cliques !! 3
-      largestClique = head . last . takeWhile (not . null) $ cliques
+      cliquesBySize = iterate growCliques [S.empty]
+      growCliques cliques = [ S.insert node clique 
+                            | node <- toList nodes
+                            , clique <- cliques
+                            , all (< node) clique
+                            , clique `S.isSubsetOf` (neighbors ! node)
+                            ]
+      part1 = length . filter (any (isPrefixOf "t")) $ cliquesBySize !! 3
+      largestClique = head . last . takeWhile (not . null) $ cliquesBySize
       part2 = intercalate "," . sort . toList $ largestClique
     in [show part1, part2]
 }
