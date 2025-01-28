@@ -9,8 +9,9 @@ import Control.Lens.Fold
 import Data.AdditiveGroup
 import Data.Bits
 import Data.Char (digitToInt, isDigit)
-import Data.Foldable (toList)
+import Data.Foldable (asum, toList)
 import Data.Functor.Classes (eq1)
+import Data.Function (fix, on)
 import Data.Graph (stronglyConnComp)
 import qualified Data.IntMap as IM
 import Data.Ix (inRange)
@@ -36,7 +37,7 @@ import Linear.Metric (dot, quadrance)
 import qualified Linear.Matrix as LM
 import Linear.Vector ((*^), zero)
 import Prelude hiding (filter)
-import Safe
+import Safe hiding (at)
 import Text.Megaparsec 
   ( (<|>)
   , Parsec
@@ -64,6 +65,7 @@ import Text.Megaparsec
   )
 import Text.Megaparsec.Char (alphaNumChar, char, digitChar, letterChar, newline, hspace, space, string)
 import Text.Megaparsec.Char.Lexer (decimal, signed)
+import Text.Printf
 import Witherable
 
 
@@ -84,6 +86,9 @@ run solution mode = do
     Example -> putStrLn $ "Input:\n" ++ input
     _ -> return ()
   putStrLn $ runSolution solution input
+
+load :: Solution a -> IO a
+load x = fromJust . parseMaybe (parser x) <$> readInputForDay (day x) Real
 
 parseTestExample :: Show a => Solution a -> IO ()
 parseTestExample Solution{day, parser} = do
@@ -1130,44 +1135,77 @@ day23 = Solution {
 }
 
 -- DAY 24
-data Node a = Constant a Int | Assignment {
-    result :: a
-  , operands :: (a, a)
-  , operator :: Int -> Int -> Int
-}
+data Gate = Gate {
+    _inputs :: (String, String)
+  , _output :: String
+  , _operator :: String
+} deriving (Show)
+makeLenses ''Gate
 
-nodeId (Constant x _) = x
-nodeId (Assignment x _ _) = x
 
-day24 :: Solution [Node String]
+toDot :: [Gate] -> String
+toDot = unlines . toListOf (folded . withIndex . folding edges) where
+  edges (idx, Gate (in0, in1) out op) = [printf "%s -> %s" a b | (a, b) <- pairs] where
+    gate = printf "\"%d %s\"" idx op
+    pairs = [(in0, gate), (in1, gate), (gate, out)]
+
+badBits :: [Gate] -> [Int]
+badBits gates = filter (not . isGood) bits where
+  bits = [0..numBits gates - 1]
+  isGood :: Int -> Bool
+  isGood bit = let
+      allZeroes = M.fromList [(printf "%c%02d" c bit, 0) | bit <- bits, c <- "xy"]
+      worksWithInputs x y = let
+          inputs = allZeroes & ix (printf "x%02d" bit) .~ x
+                             & ix (printf "y%02d" bit) .~ y
+          out = printf "z%02d" bit
+          carry = printf "z%02d" (bit + 1)
+          eval wire = evaluateWire gates inputs wire
+        in (eval out == (x + y) .&. 1) && (eval carry == (x + y) .>>. 1)
+    in and [worksWithInputs x y | x <- [0, 1], y <- [0, 1]]
+
+
+numBits :: [Gate] -> Int
+numBits = (subtract 1) . lengthOf (folded . output . filtered (isPrefixOf "z"))
+
+
+evaluateWire :: [Gate] -> M.Map String Int -> String -> Int
+evaluateWire gates inputs x = inputs ^. at x . non (evaluateGate gates inputs x)
+
+evaluateGate :: [Gate] -> M.Map String Int -> String -> Int
+evaluateGate gates inputs x = let
+    Gate (in0, in1) _ opName = fromJust $ find ((== x) . _output) gates
+    op = case opName of
+      "AND" -> (.&.)
+      "OR" -> (.|.)
+      _ -> (.^.)
+  in on op (evaluateWire gates inputs) in0 in1
+
+day24 :: Solution (M.Map String Int, [Gate])
 day24 = Solution {
    day = 24
  , parser = do
      let wire = some alphaNumChar
-         constant = Constant <$> (wire <* ": ") <*> decimal
-         bitop = ("AND" >> pure (.&.)) <|> ("XOR" >> pure (.^.)) <|> ("OR" >> pure (.|.))
-         assignment = do
+         signal = (,) <$> (wire <* ": ") <*> decimal
+         bitop = asum ["AND", "XOR", "OR"]
+         gate = do
            in0 <- wire <* " "
            op <- bitop <* " "
            in1 <- wire <* " -> "
            out <- wire
-           return $ Assignment out (in0, in1) op
-     constants <- constant `sepEndBy` newline
+           return $ Gate (in0, in1) out op
+     inputs <- signal `sepEndBy` newline
      _ <- many newline
-     assignments <- try assignment `sepEndBy` newline
-     return $ constants ++ assignments
-  , solver = \nodes -> let
-      zs = sortOn Down . filter ("z" `isPrefixOf`) . fmap nodeId $ nodes
-      lookupId x = fromJust . find ((== x) . nodeId) $ nodes
-      evaluate x = let
-        node = lookupId x
-        in case node of
-          Constant _ y -> y
-          Assignment _ (a, b) op -> op (evaluate a) (evaluate b)
-      part1 = foldl (\acc x -> (acc .<<. 1) .|. x) 0 (evaluate <$> zs)
-    in [show part1]
+     gates <- try gate `sepEndBy` newline
+     return $ (M.fromList inputs, gates)
+  , solver = \(inputs, gates) -> let
+      zs = sort $ gates ^.. folded . output . filtered (isPrefixOf "z") 
+      part1 = sum $ zipWith (.<<.) (evaluateWire gates inputs <$> zs) [0..]
+      -- used toDot and badBits to narrow down the search, then manually analyzed the circuit
+      swappedGates = [("z06", "jmq"), ("z13", "gmh"), ("z38", "qrh"), ("rqf", "cbd")]
+      part2 = intercalate "," . sort $ toListOf (folded . both) swappedGates
+    in [show part1, part2]
 }
-
 
 -- DAY 25
 
