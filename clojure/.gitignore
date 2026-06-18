@@ -1,0 +1,31 @@
+# --- Build Targets & Artifacts ---
+/target/
+/classes/
+/lib/
+/checkouts/
+*.jar
+*.class
+
+# --- Clojure CLI & deps.edn ---
+.cpcache/
+.nrepl-port
+.shadow-cljs/
+
+# --- Leiningen ---
+pom.xml
+pom.xml.asc
+.lein-deps-sum
+.lein-repl-history
+.lein-plugins/
+.lein-failures
+
+# --- Boot ---
+/boot/
+.boot/
+boot.properties
+
+# --- LSP & Linting Caches ---
+.clj-kondo/
+.lsp/
+.calva/
+

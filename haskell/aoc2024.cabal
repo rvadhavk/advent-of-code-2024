@@ -5,17 +5,23 @@ version:            0.1.0.0
 library
     ghc-options: -Wall -O
     exposed-modules:  AoC2024
-    default-extensions: TemplateHaskell, OverloadedStrings, RankNTypes, ImpredicativeTypes
+    default-extensions: DeriveGeneric, DataKinds, TemplateHaskell, OverloadedStrings, RankNTypes, ImpredicativeTypes, QuasiQuotes, FunctionalDependencies, TypeApplications
     build-depends:    
+      aeson,
+      array,
       base,
+      bytestring,
       comonad,
       containers,
+      generic-lens,
       lens,
+      lens-aeson,
       linear,
       megaparsec,
       mtl,
       multimap,
       parsec,
+      raw-strings-qq,
       safe,
       text ^>= 2.1.2,
       transformers,
